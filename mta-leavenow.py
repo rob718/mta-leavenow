@@ -96,7 +96,7 @@ def scrolldisplay():
             
             #scrollphathd.show()
             #scrollphathd.scroll()
-            #time.sleep(0.02)
+            time.sleep(0.02)
 
 # Function connects to feed and gets list of trains for the given station.
 # Returns two-dimensional list: arrival time, train name
