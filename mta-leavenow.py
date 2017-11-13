@@ -4,11 +4,12 @@
 # Leave Now - Encouraging stress-free travel to your local MTA subway station
 # by knowing when it's time to leave home.
 
-# Version 1.2 12-Nov-2017 by Rob D <http://github.com/rob718/mta-leavenow>
+# Version 1.3 13-Nov-2017 by Rob D <http://github.com/rob718/mta-leavenow>
 # Based on a concept written by Anthony N <http://github.com/neoterix/nyc-mta-arrival-notify>
 
 # == Change Log
-# v1.2 12-Nov-2017: My roommate requested that we display train arrival times
+# v1.3 13-Nov-2017: Now ignoring trains that 'appear' to arrive in the past
+# v1.2 12-Nov-2017: My room mate requested that we display train arrival times
 #	instead of this program's original intent, where we tell you when it's
 #	time to leave your home or office by factoring in the station travel
 #	time. So here it is - uncomment either of the last two lines in this file
@@ -57,7 +58,7 @@ import time
 import threading
 
 # Enable support for third-party displays like the Pimoroni scroll pHAT HD
-import scrollphathd
+#import scrollphathd
 
 # Specifiy the subway station ID to use. For example 'R31N' for "Northbound
 # Atlantic Av - Barclays Ctr"
@@ -84,15 +85,18 @@ def scrolldisplay():
         if text_to_display != display_message:
             # display message has changed, let's update
             text_to_display = display_message
-            print 'mta-leavenow:{}'.format(text_to_display)
-            scrollphathd.clear()
-            scrollphathd.set_brightness(0.1)
-            scrollphathd.write_string(text_to_display)
+            print '{} mta-leavenow:{}'.format(time.strftime('%b %d %H:%M:%S'),text_to_display)
+            
+            # update third-party display
+            #scrollphathd.clear()
+            #scrollphathd.set_brightness(0.1)
+            #scrollphathd.write_string(text_to_display)
         else:
             # no change, continue to show original message
-            scrollphathd.show()
-            scrollphathd.scroll()
-            time.sleep(0.01)
+            
+            #scrollphathd.show()
+            #scrollphathd.scroll()
+            #time.sleep(0.02)
 
 # Function connects to feed and gets list of trains for the given station.
 # Returns two-dimensional list: arrival time, train name
@@ -101,8 +105,8 @@ def station_time_lookup(feed_id, station_id):
     arrival_list = []
 
     # number of attempts to connect to MTA feed after failure
-    tries = 8
-    for i in range(tries):
+    max_tries = 49
+    for index in range(max_tries):
         try:
             # Get the MTA's data feed for a given set of lines. For more info,
             # see http://datamine.mta.info/list-of-feeds. The format of the feed
@@ -116,13 +120,13 @@ def station_time_lookup(feed_id, station_id):
             subway_feed = protobuf_to_dict(feed)
             train_data = subway_feed['entity']
         except:
-            if i < tries - 1:
-                display_message = ' ERROR connecting to MTA feed. Retrying.'
-                time.sleep(2)
+            if index <= max_tries:
+                display_message = ' ERROR connecting to MTA feed. Delaying for 30s. Attempt {} of {}.'.format(index+1,max_tries+1)
+                time.sleep(30)
                 continue
             else:
-                display_message = '#fail'
-                time.sleep(2)
+                display_message = ' ERROR connecting to MTA feed. Max # of retries attempted.'
+                time.sleep(10)
                 raise
         break
 
@@ -142,7 +146,6 @@ def station_time_lookup(feed_id, station_id):
                     train_time = train_time_data['time']
                     if train_time != None:
                         arrival_list.append([train_time,train_name])
-                        #print 'debug:',train_time,train_name
 
     return arrival_list
 
@@ -151,7 +154,6 @@ def station_time_lookup(feed_id, station_id):
 def leavenow():
     # declare global variables for display message, and set initial message
     global display_message
-    global display_message_lastupdate
     display_message = ' Getting data...'
 
     # start display in a seperate thread
@@ -169,22 +171,27 @@ def leavenow():
             station_trains.sort()
 
         if station_trains:
-            for next_train in station_trains:
+            for index, train in enumerate(station_trains):
 
-                # calc mins remaining using train arrival time, and subway travel time
+                # determine next arrival time
                 current_time = int(time.time())
-                arrival_mins = int((next_train[0] - current_time))
-                mins_to_go = int(round(((arrival_mins-station_travel_time)/60.0),0))
+                train_arrival = int((train[0] - current_time))
 
-                # NOTE: This section could be improved. While it works well for stations
-                # around 5-8 mins away, it might not for stations taking longer
-                train_name = str(next_train[1])
-                if mins_to_go == 1:
-                    display_message = ('     Leave NOW to for ({})'.format(train_name))
+                # do not show past arrivals (e.g. a train arriving in -2 minutes)
+                if train_arrival >= 0:
+
+                    # calc mins remaining using train arrival time, and subway travel time
+                    mins_to_go = int(round(((train_arrival-station_travel_time)/60.0),0))
+                    train_name = str(train[1])
+
+                    # NOTE: This section could be improved. While it works well for stations
+                    # around 5-8 mins away, it might not for stations taking longer
+                    if mins_to_go == 1:
+                        display_message = ('     Leave NOW to for ({})'.format(train_name))
+                        break
+                    elif mins_to_go > 1:
+                        display_message = ('     Leave in {}\' for ({})'.format(mins_to_go,train_name))
                     break
-                elif mins_to_go > 1:
-                    display_message = ('     Leave in {}\' for ({})'.format(mins_to_go,train_name))
-                break
         else:
             display_message = (' No trains.')
 
@@ -200,28 +207,39 @@ def nexttrain():
     display = threading.Thread(target=scrolldisplay)
     display.daemon = True
     display.start()
-                
+
+    # loop indefinitely, pausing for a set time                
     while True:
+    
+        # get list of trains for given station, and sort based on arrival time
         station_trains = []
         for subway_feed_id in subway_feed_ids:
             station_trains.extend(station_time_lookup(subway_feed_id,subway_station_id))
             station_trains.sort()
+
         if station_trains:
-            current_time = int(time.time())
-            display_message = '     ({}) in {}\' then ({}) in {}\''.format(
-                str(station_trains[0][1]),
-                int(round(((station_trains[0][0] - current_time) / 60.0),0)),
-                str(station_trains[1][1]),
-                int(round(((station_trains[1][0] - current_time) / 60.0),0))
-                )
+            for index, train in enumerate(station_trains):
+
+                # determine next arrival time
+                current_time = int(time.time())
+                train_arrival = int((train[0] - current_time))
+
+                # do not show past arrivals (e.g. a train arriving in -2 minutes)
+                if train_arrival >= 0:
+                    display_message = '     ({}) in {}\' then ({}) in {}\''.format(
+                        str(station_trains[index][1]),
+                        int(round(((station_trains[index][0] - current_time) / 60.0),0)),
+                        str(station_trains[index+1][1]),
+                        int(round(((station_trains[index+1][0] - current_time) / 60.0),0))
+                        )
+                    break
         else:
             display_message = (' No trains.')
 
-        #print 'debug:',display_message
         time.sleep(5)
 
 # Uncomment either line below to switch the behaviour of the program between the
 # original, "leavenow" mode (letting you know when it's time to leave your home/office)
 # or "traintime" mode that simply displays the arrival times of the next two trains.
-if __name__ == '__main__': leavenow()
-#if __name__ == '__main__': nexttrain()
+#if __name__ == '__main__': leavenow()
+if __name__ == '__main__': nexttrain()
