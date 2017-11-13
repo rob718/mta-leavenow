@@ -8,7 +8,7 @@
 # Based on a concept written by Anthony N <http://github.com/neoterix/nyc-mta-arrival-notify>
 
 # == Change Log
-# v1.2 12-Nov-2017: My room mate requested that we display train arrival times
+# v1.2 12-Nov-2017: My roommate requested that we display train arrival times
 #	instead of this program's original intent, where we tell you when it's
 #	time to leave your home or office by factoring in the station travel
 #	time. So here it is - uncomment either of the last two lines in this file
@@ -194,7 +194,6 @@ def leavenow():
 def nexttrain():
     # declare global variables for display message, and set initial message
     global display_message
-    global display_message_lastupdate
     display_message = ' Getting data...'
                 
     # start display in a seperate thread
@@ -221,6 +220,8 @@ def nexttrain():
         #print 'debug:',display_message
         time.sleep(5)
 
-# Uncomment respective line to program switch behaviour
+# Uncomment either line below to switch the behaviour of the program between the
+# original, "leavenow" mode (letting you know when it's time to leave your home/office)
+# or "traintime" mode that simply displays the arrival times of the next two trains.
 if __name__ == '__main__': leavenow()
 #if __name__ == '__main__': nexttrain()
