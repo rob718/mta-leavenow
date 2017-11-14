@@ -1,11 +1,13 @@
 # mta-leavenow
-A python script that let’s you know when it’s time to leave home to make the next subway train. The script basically reads the NYC MTA data feed to determine the next arrival train for a given station. It then let’s you know (in minutes) when to leave your home or office based on the train arrival time and how long it takes to walk to the station in question.
-This script could easily be modified to work with other transport systems utilizing Google’s GTFS Reatime format.
-https://developers.google.com/transit/gtfs-realtime/
+A python script that let’s you know when it’s time to leave home to make the next subway train. The script basically reads the NYC MTA data feed to determine the next arrival train for a given station. You can switch the behavior of the script between the original, **leavenow** mode (letting you know in minutes when it's time to leave your home/office) or **nexttrain** mode that simply displays the arrival times of the next two trains.
 
-***Update 12-Nov-2017***: My room mate requested that we display train arrival times instead of this program's original intent, where we tell you when it's time to leave your home or office by factoring in the station travel time. So here it is - uncomment either of the last two lines in this file to switch program behaviour (the original, "leavenow" mode or the new "traintime" mode). Also added error checking when getting the MTA feed.
+Typical output in **leavenow** mode:
+```Leave home in 5 min for (D) train.```
 
-Note that the script currently outputs to both the console and a [Scroll pHAT](https://shop.pimoroni.com/products/scroll-phat-hd). It should be simple enough to change this for your needs e.g. a [Sense HAT](https://www.raspberrypi.org/products/sense-hat/).
+Typical output in **nexttrain** mode:
+```The (D) train departs in 8 min then (N) train departs in 11 min.```
+
+The script is currently configured to output both to the console and a [Scroll pHAT HD](https://shop.pimoroni.com/products/scroll-phat-hd) but you can easily substitue any type of third-party display. In addition as the script is based on Google’s GTFS Reatime format, it could quite easily be modifeid to work with other transport systems that also utilize the GTFS REaltime format https://developers.google.com/transit/gtfs-realtime/
 
 # Prerequisites
 The following packages are needed:  Google's [gtfs-realtime-bindings](https://github.com/google/gtfs-realtime-bindings) and Ben Hodgson's [protobuf-to-dict](https://github.com/kaporzhu/protobuf-to-dict). Depending on your system, you can install them with something like:
