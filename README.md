@@ -7,7 +7,7 @@ Typical output in **leavenow** mode:
 Typical output in **nexttrain** mode:
 ```The (D) train departs in 8 min then (N) train departs in 11 min.```
 
-The script is currently configured to output both to the console and a [Scroll pHAT HD](https://shop.pimoroni.com/products/scroll-phat-hd) but you can easily substitue any type of third-party display. In addition as the script is based on Google’s GTFS Reatime format, it could quite easily be modifeid to work with other transport systems that also utilize the GTFS REaltime format https://developers.google.com/transit/gtfs-realtime/
+The script is currently configured to output both to the console and a [Scroll pHAT HD](https://shop.pimoroni.com/products/scroll-phat-hd) but you can easily substitute any type of third-party display. In addition as the script is based on Google’s GTFS Reatime format, it could quite easily be modifeid to work with other transport systems that also utilize the GTFS REaltime format https://developers.google.com/transit/gtfs-realtime/
 
 # Prerequisites
 The following packages are needed:  Google's [gtfs-realtime-bindings](https://github.com/google/gtfs-realtime-bindings) and Ben Hodgson's [protobuf-to-dict](https://github.com/kaporzhu/protobuf-to-dict). Depending on your system, you can install them with something like:
