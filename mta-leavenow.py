@@ -4,10 +4,11 @@
 # Leave Now - Encouraging stress-free travel to your local MTA subway station
 # by knowing when it's time to leave home.
 
-# Version 1.4 15-Nov-2017 by Rob D <http://github.com/rob718/mta-leavenow>
+# Version 1.5 22-Nov-2017 by Rob D <http://github.com/rob718/mta-leavenow>
 # Based on a concept written by Anthony N <http://github.com/neoterix/nyc-mta-arrival-notify>
 
 # == Change Log
+# v1.5 22-Nov-2017: Bug fixes.
 # v1.4 15-Nov-2017: General tweaks and code cleanup.
 # v1.3 13-Nov-2017: Now ignoring trains that 'appear' to arrive in the past
 # v1.2 12-Nov-2017: My room mate requested that we display train arrival times
@@ -66,7 +67,7 @@ api_key = 'YOUR_KEY'
 
 # Specifiy the subway station ID to use. For example 'R31N' for "Northbound
 # Atlantic Av - Barclays Ctr"
-subway_station_id = 'R31N'
+subway_station_id = 'R32N'
 
 # How long does it take (in second) to walk to this subway station
 station_travel_time = 170
@@ -76,14 +77,19 @@ station_travel_time = 170
 # you may need to specify more than one. Comma seperate these. Of course
 # it only makes sense to specify lines that pass through that station.
 # For more info see http://datamine.mta.info/list-of-feeds
-subway_feed_ids = [16,21]
+#subway_feed_ids = [16,21]
+subway_feed_ids = [16]
 
 # How long should we wait before attempting to refresh the feed (in seconds)?
-# Each time we make a request, we're pulling back anything from 50 to 120 kiBs
-# It doesn't sound much, but with a delay of 30 seconds, for two lines (feeds),
-# expect to pull around 450 MiB in a 24 hour period! On a RaspPi Zero, expect
-# a turn-around of retrieving and processing data to be around 12-15 secs.
-refresh_delay = 45
+# Feeds are generated every 30 seconds, so anything less wouldn't make sense.
+#
+# Note the size of each feed is going to be anything from 50 to 120 kiBs
+# depending on the line. It doesn't sound much, but with a delay of 30 seconds,
+# for two lines (feeds), expect to pull around 450 MiB in a 24 hour period!
+#
+# On a RaspPi Zero, expect a turn-around of retrieving and processing data
+# to be around 12-15 seconds.
+refresh_delay = 65
 
 # In case we are unable to connect and/or process the feed, how many attemps
 # before giving up (default is 30)
@@ -165,6 +171,7 @@ def station_time_lookup(feed_id, station_id):
                     train_time = train_time_data['time']
                     if train_time != None:
                         arrival_list.append([train_time,train_name])
+                        #print ('debug2: ',train_time,train_name)
 
     # Return two-dimensional list: arrival time, train name
     return arrival_list
@@ -175,7 +182,7 @@ def leavenow():
     global display_message
 
     # start display in a seperate thread
-    display_message = (' Getting data...')
+    display_message = (' Getting train data...')
     display = threading.Thread(target=scrolldisplay)
     display.daemon = True
     display.start()
@@ -200,27 +207,41 @@ def leavenow():
                 # or trains that you'll never make (i.e. factor in station travel time)
                 if (train_arrival - station_travel_time) >= 0:
 
-                    # calc mins remaining using train arrival time, and subway travel time
+                    # get arrival details
                     train1_name = str(station_trains[index][1])
-                    train2_name = str(station_trains[index + 1][1])
                     train1_mins_to_leave = int(round(((
                         station_trains[index][0] - current_time - station_travel_time) / 60.0),0))
-                    train2_mins_to_leave = int(round(((
-                        station_trains[index + 1][0] - current_time - station_travel_time) / 60.0),0))
 
-                    # NOTE: This section could be improved. While it works well for stations
-                    # around 5-8 mins away, it might not for stations taking longer
+                    # if there's an arrival after this one, get details and show both
+                    train_count = len(station_trains)
+                    if (train_count - (index + 1)) >= 2:
+                        train2_name = str(station_trains[index + 1][1])
+                        train2_mins_to_leave = int(round(((
+                            station_trains[index + 1][0] - current_time - station_travel_time) / 60.0),0))
+                        
+                        # this section can be improved as it may not work well
+                        # if the station is more than 5 to 8 minutes away
+                        if train1_mins_to_leave < 1:
+                            display_message = ('     Leave NOW for ({}) or {}\' for ({}).'
+                                .format(train1_name, train2_mins_to_leave, train2_name))
+                            break
+                        elif train1_mins_to_leave > 1:
+                            display_message = ('     Leave in {}\' for ({}) or {}\' for ({}).'
+                                .format(train1_mins_to_leave, train1_name,
+                                    train2_mins_to_leave, train2_name))
+                        break
+                    
+                    # if we're here, assume we can only show one train
                     if train1_mins_to_leave < 1:
-                        display_message = ('     Leave NOW for ({}) or {}\' for ({}).'
-                            .format(train1_name, train2_mins_to_leave, train2_name))
+                        display_message = ('     Leave NOW for ({}).'.format(train1_name))
                         break
                     elif train1_mins_to_leave > 1:
-                        display_message = ('     Leave in {}\' for ({}) or {}\' for ({}).'
-                            .format(train1_mins_to_leave, train1_name,
-                                train2_mins_to_leave, train2_name))
+                        display_message = ('     Leave in {}\' for ({}).'
+                            .format(train1_mins_to_leave, train1_name))
                     break
+
         else:
-            display_message = (' No trains.')
+            display_message = ('     Cannot get train data or there are no trains.')
 
         time.sleep(refresh_delay)
 
@@ -229,7 +250,7 @@ def traintime():
     global display_message
 
     # start display in a seperate thread
-    display_message = (' Getting MTA data...')
+    display_message = (' Getting train data...')
     display = threading.Thread(target=scrolldisplay)
     display.daemon = True
     display.start()
@@ -253,23 +274,30 @@ def traintime():
                 # do not show past arrivals (e.g. a train arriving in -2 minutes)
                 # or trains that you'll never make (i.e. factor in station travel time)
                 if (train_arrival - station_travel_time) >= 0:
-
-                    # in an attempt to make this section easier to read...
                     train1_name = str(station_trains[index][1])
-                    train2_name = str(station_trains[index + 1][1])
                     train1_minsaway = int(round(((
                         station_trains[index][0] - current_time) / 60.0),0))
-                    train2_minsaway = int(round(((
-                        station_trains[index + 1][0] - current_time) / 60.0),0))
 
-                    display_message = ('     ({}) in {}\' then ({}) in {}\''.format(
-                        train1_name, train1_minsaway,
-                        train2_name, train2_minsaway))
+                    # if there's an arrival after this one, get details and show both
+                    train_count = len(station_trains)
+                    if (train_count - (index + 1)) >= 2:
+                        train2_name = str(station_trains[index + 1][1])
+                        train2_minsaway = int(round(((
+                            station_trains[index + 1][0] - current_time) / 60.0),0))
+                        display_message = ('     ({}) in {}\' then ({}) in {}\''.format(
+                            train1_name, train1_minsaway,
+                            train2_name, train2_minsaway))
+                        break
+                        
+                    # if we're here then, assume we can only show one train
+                    display_message = ('     ({}) in {}\''.format(
+                        train1_name, train1_minsaway))
+                    
                     break
-
+                
         else:
-            display_message = (' No trains.')
-
+            display_message = ('     Cannot get train data or there are no trains.')
+            
         time.sleep(refresh_delay)
 
 # Uncomment either line below to switch the behaviour of the program between the
