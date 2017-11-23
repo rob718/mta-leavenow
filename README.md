@@ -8,7 +8,7 @@ In both case, travel time to your local station is taken into account and trains
 The script is based on Google’s GTFS Reatime format, it could quite easily be modifeid to work with other transport systems that also utilize the GTFS REaltime format https://developers.google.com/transit/gtfs-realtime/
 
 # Output
-Output is the console but it's intent is to output to some sort of display. I have it running on a Raspberry Pi Zero W with a [Scroll pHAT HD](https://shop.pimoroni.com/products/scroll-phat-hd). I've then mounted it on a wall next to the door so I can glance at it just before I leave the apartment.
+Output is the console but its intent is to output to some sort of display. I have it running on a Raspberry Pi Zero W with a [Scroll pHAT HD](https://shop.pimoroni.com/products/scroll-phat-hd). I've then mounted it on a wall next to the door so I can glance at it just before I leave the apartment.
 
 ![](scrollphathd.gif)
 
