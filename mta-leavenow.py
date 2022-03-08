@@ -1,40 +1,25 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # =============================================================================
-
+#
 # Leave Now - Encouraging stress-free travel to your local MTA subway station
 # by knowing when it's time to leave home.
-
-# Version 1.5 22-Nov-2017 by Rob D <http://github.com/rob718/mta-leavenow>
-# Based on a concept written by Anthony N <http://github.com/neoterix/nyc-mta-arrival-notify>
-
-# == Change Log
-# v1.5 22-Nov-2017: Bug fixes.
-# v1.4 15-Nov-2017: General tweaks and code cleanup.
-# v1.3 13-Nov-2017: Now ignoring trains that 'appear' to arrive in the past
-# v1.2 12-Nov-2017: My room mate requested that we display train arrival times
-#	instead of this program's original intent, where we tell you when it's
-#	time to leave your home or office by factoring in the station travel
-#	time. So here it is - uncomment either of the last two lines in this file
-#	to switch program behaviour (the original, "leavenow" mode or the new
-#	"traintime" mode). Also added error checking when getting the MTA feed.
 #
-# v1.1 04-Nov-2017: Added Scroll pHAT HD Support
-# v1.0 29-Oct-2017: Initial version
-
+# Version 2.0 7-Mar-2022 by Rob D <http://github.com/rob718/mta-leavenow>
+#
+# == Change Log
+# v2.0 7-Mar-2022: Rewritten using NYCT-GTFS library by Andrew Dickinson
+#
 # == Prerequisites
-# Install Google's "gtfs-realtime-bindings" and Ben Hodgson's "protobuf-to-dict"
-# libraries. Depending on your system, you can install them with something like:
-#  pip install --upgrade gtfs-realtime-bindings
-#  pip install --upgrade protobuf-to-dict
-
+# NYCT-GTFS library https://github.com/Andrew-Dickinson/nyct-gtfs
+#
 # == License
 # This is free and unencumbered software released into the public domain.
-
+#
 # Anyone is free to copy, modify, publish, use, compile, sell, or
 # distribute this software, either in source code form or as a compiled
 # binary, for any purpose, commercial or non-commercial, and by any
 # means.
-
+#
 # In jurisdictions that recognize copyright laws, the author or authors
 # of this software dedicate any and all copyright interest in the
 # software to the public domain. We make this dedication for the benefit
@@ -42,7 +27,7 @@
 # successors. We intend this dedication to be an overt act of
 # relinquishment in perpetuity of all present and future rights to this
 # software under copyright law.
-
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 # EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 # MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -50,258 +35,128 @@
 # OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 # ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
-
+#
 # For more information, please refer to <http://unlicense.org>
 # =============================================================================
-from google.transit import gtfs_realtime_pb2
-from protobuf_to_dict import protobuf_to_dict
-import urllib
-import time
+from nyct_gtfs import NYCTFeed
 import threading
-
-# Enable support for third-party displays like the Pimoroni scroll pHAT HD
+import datetime
+import time
 #import scrollphathd
 
-# You'll also need an API key. Get yours from http://datamine.mta.info/user
-api_key = 'YOUR_KEY'
+# Specifiy your feed access key. See https://api.mta.info/#/AccessKey
+my_api_key = 'YOUR_API_KEY'
 
-# Specifiy the subway station ID to use. For example 'R31N' for "Northbound
-# Atlantic Av - Barclays Ctr"
-subway_station_id = 'R32N'
+# Which subway feed should be used for your stop?
+# List of feeds: https://api.mta.info/#/subwayRealTimeFeeds
+my_feed_url = 'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-bdfm'
 
-# How long does it take (in second) to walk to this subway station
-station_travel_time = 170
-
-# Which subway feeds should we use for this subway station? MTA feeds are
-# based on subway lines and some stations have multiple lines, therefore
-# you may need to specify more than one. Comma seperate these. Of course
-# it only makes sense to specify lines that pass through that station.
-# For more info see http://datamine.mta.info/list-of-feeds
-#subway_feed_ids = [16,21]
-subway_feed_ids = [16]
-
-# How long should we wait before attempting to refresh the feed (in seconds)?
-# Feeds are generated every 30 seconds, so anything less wouldn't make sense.
+# What station do you want to monitor? 
+# http://web.mta.info/developers/data/nyct/subway/Stations.csv
 #
-# Note the size of each feed is going to be anything from 50 to 120 kiBs
-# depending on the line. It doesn't sound much, but with a delay of 30 seconds,
-# for two lines (feeds), expect to pull around 450 MiB in a 24 hour period!
-#
+# Determine "GTFS Stop ID" and suffix direction.
+# For example 'R31N' for "Northbound Atlantic Av - Barclays Ctr"
+my_stop_id = 'R31N'
+
+# How long does it take in minutes to walk to this station?
+my_walking_time = 3
+
+# How long should we wait before refreshing MTA feed? MTA says feeds are
+# generated every 30 seconds, so anything less wouldn't make sense.
+# Feed size (from each pull) can be around 500 kiB. Therefore expect to pull
+# around 350 MiB in a 24 hour period.
 # On a RaspPi Zero, expect a turn-around of retrieving and processing data
-# to be around 12-15 seconds.
-refresh_delay = 65
+# to be around 15 seconds.
+feed_refresh_delay = 65
 
-# In case we are unable to connect and/or process the feed, how many attemps
-# before giving up (default is 30)
-max_attempts = 30
 
-# Function to handle display -this will run continuously as a seperate thread
-def scrolldisplay():
-    text_to_display = None
+def ticker():
+    global ticker_text
+    current_text = None
+
+    # Don't stop! Continously loop forever (or until you kill it!)
     while True:
-        if text_to_display != display_message:
-            # message has changed, let's update display
-            text_to_display = display_message
-            print ('{} mta-leavenow:{}'
-                .format(time.strftime('%b %d %H:%M:%S'),text_to_display) )
-            
-            # third-party display specific commands here
+
+        # Determine if ticker text has changed since last update
+        if current_text != ticker_text:
+            current_text = ticker_text
+
+            # Update console (or log)
+            print ('{} mta-leavenow: {}'
+                .format(time.strftime('%b %d %H:%M:%S'), ticker_text) )
+                            
+            # Update buffer on Pimoroni Scroll HAT
             #scrollphathd.clear()
             #scrollphathd.set_brightness(0.1)
-            #scrollphathd.write_string(text_to_display)
+            #scrollphathd.write_string('     ' + ticker_text)
+
         else:
-            # no change, so continue to show original message
-            
-            # third-party display specific commands here
+        
+            # Scroll buffer on Pimoroni Scroll HAT
             #scrollphathd.show()
             #scrollphathd.scroll()
-
             time.sleep(0.02)
 
-# Function connects to MTA feed and gets list of trains for the given station.
-def station_time_lookup(feed_id, station_id):
-    global display_message
 
-    for attempt in range((max_attempts - 1)):
-        try:
-            # Get the MTA's data feed for a given set of lines. For more info,
-            # see http://datamine.mta.info/list-of-feeds. The format of the feed
-            # is "GTFS Realtime" (based on "protocol buffers") by Google.
-            # Retrieval takes around 8-9 seconds on a RaspPi Zero
-            transit_feed_pb = gtfs_realtime_pb2.FeedMessage()
-            response = urllib.urlopen('http://datamine.mta.info/mta_esi.php?key={}&feed_id={}'
-                .format(api_key, feed_id))
-            transit_feed_pb.ParseFromString(response.read())
+def get_trains(action):
+    global feed
+    
+    # Determine if we should do a new pull or a refresh according to NYCT-GTFS
+    # library instruction. We must also update feed references as existing
+    # objects are not modified by refresh()
+    if action == 'refresh':
+        feed.refresh()
+        trains = feed.trips[0]
+    else:
+        feed = NYCTFeed(my_feed_url, api_key=my_api_key)
+    
+    # filter feed to only trains headed to our stop and are moving
+    trains = feed.filter_trips(headed_for_stop_id=my_stop_id, underway=True)
 
-            # Convert feed from Google's "protocol buffer" to a dictionary
-            # and attempt to read FeedEntity message. Sometimes we have to
-            # retry as a full dataset is not always provided by MTA. See:
-            # https://developers.google.com/transit/gtfs-realtime/reference/
-            # Conversion takes around 2-3 seconds on a RaspPi Zero
-            transit_feed_dict = protobuf_to_dict(transit_feed_pb)
-            train_data = transit_feed_dict['entity']
+    # find trains those next stop is our stop
+    # (i.e. we don't want those earlier down the track)
+    arrivals = []
+    for train_num in range(len(trains)):
+        stops = trains[train_num].stop_time_updates
+        for stop in stops:
+            if stop.stop_id == my_stop_id:
 
-        except:
-            if attempt <= max_attempts:
-                display_message = (' ERROR getting data. Delaying for 30s. Attempt {} of {}.'
-                    .format((attempt + 1), max_attempts))
-                time.sleep(30)
-                continue
-            else:
-                display_message = (' ERROR getting data. Max # of retries attempted.')
-                time.sleep(10)
-                raise
+                # get arrival time (in minutes) and train number.
+                # Ignore trains arriving too soon
+                arrival_time = int((stop.arrival - datetime.datetime.now())
+                    .total_seconds() / 60)
+                if arrival_time >= my_walking_time:
+                    arrivals.append([arrival_time, trains[train_num].route_id])
 
-        break
+    arrivals.sort()
+    return arrivals
 
-    # Loop through the data to get train times, and line info
-    arrival_list = []
-    for trains in train_data:
-        if trains.get('trip_update', False) != False:
-            train_trips = trains['trip_update']
-            station_times = train_trips['stop_time_update']
-            train_trip_details = train_trips['trip']
-            train_name = train_trip_details['route_id']
 
-            # Filter out data not pertaining to the given station
-            # (and direction) and get train arrivals, and train names
-            for arrivals in station_times:
-                if arrivals.get('stop_id', False) == station_id:
-                    train_time_data = arrivals['arrival']
-                    train_time = train_time_data['time']
-                    if train_time != None:
-                        arrival_list.append([train_time,train_name])
-                        #print ('debug2: ',train_time,train_name)
+def main():
+    global ticker_text
+    ticker_text = ('Getting train data...')
 
-    # Return two-dimensional list: arrival time, train name
-    return arrival_list
+    # create seperate thread for ticker (tape)
+    tape = threading.Thread(target=ticker)
+    tape.daemon = True
+    tape.start()
 
-# Original function that let's you know when it's time to leave your home/office by
-# factoring in travel time.
-def leavenow():
-    global display_message
-
-    # start display in a seperate thread
-    display_message = (' Getting train data...')
-    display = threading.Thread(target=scrolldisplay)
-    display.daemon = True
-    display.start()
-
-    # loop indefinitely, pausing for a set time
-    while True:
-
-        # get list of trains for given station, and sort based on arrival time
-        station_trains = []
-        for subway_feed_id in subway_feed_ids:
-            station_trains.extend(station_time_lookup(subway_feed_id,subway_station_id))
-            station_trains.sort()
-
-        if station_trains:
-            for index, train in enumerate(station_trains):
-
-                # determine next arrival time
-                current_time = int(time.time())
-                train_arrival = int((train[0] - current_time))
-
-                # do not show past arrivals (e.g. a train arriving in -2 minutes)
-                # or trains that you'll never make (i.e. factor in station travel time)
-                if (train_arrival - station_travel_time) >= 0:
-
-                    # get arrival details
-                    train1_name = str(station_trains[index][1])
-                    train1_mins_to_leave = int(round(((
-                        station_trains[index][0] - current_time - station_travel_time) / 60.0),0))
-
-                    # if there's an arrival after this one, get details and show both
-                    train_count = len(station_trains)
-                    if (train_count - (index + 1)) >= 2:
-                        train2_name = str(station_trains[index + 1][1])
-                        train2_mins_to_leave = int(round(((
-                            station_trains[index + 1][0] - current_time - station_travel_time) / 60.0),0))
-                        
-                        # this section can be improved as it may not work well
-                        # if the station is more than 5 to 8 minutes away
-                        if train1_mins_to_leave < 1:
-                            display_message = ('     Leave NOW for ({}) or {}\' for ({}).'
-                                .format(train1_name, train2_mins_to_leave, train2_name))
-                            break
-                        elif train1_mins_to_leave > 1:
-                            display_message = ('     Leave in {}\' for ({}) or {}\' for ({}).'
-                                .format(train1_mins_to_leave, train1_name,
-                                    train2_mins_to_leave, train2_name))
-                        break
-                    
-                    # if we're here, assume we can only show one train
-                    if train1_mins_to_leave < 1:
-                        display_message = ('     Leave NOW for ({}).'.format(train1_name))
-                        break
-                    elif train1_mins_to_leave > 1:
-                        display_message = ('     Leave in {}\' for ({}).'
-                            .format(train1_mins_to_leave, train1_name))
-                    break
-
-        else:
-            display_message = ('     Cannot get train data or there are no trains.')
-
-        time.sleep(refresh_delay)
-
-# New function (since version 1.2) that shows the times of the next two trains.
-def traintime():
-    global display_message
-
-    # start display in a seperate thread
-    display_message = (' Getting train data...')
-    display = threading.Thread(target=scrolldisplay)
-    display.daemon = True
-    display.start()
-
-    # loop indefinitely, pausing for a set time                
+    # get train data and update ticker
+    trains = get_trains('new')
     while True:
     
-        # get list of trains for given station, and sort based on arrival time
-        station_trains = []
-        for subway_feed_id in subway_feed_ids:
-            station_trains.extend(station_time_lookup(subway_feed_id,subway_station_id))
-            station_trains.sort()
-
-        if station_trains:
-            for index, train in enumerate(station_trains):
-
-                # determine next arrival time
-                current_time = int(time.time())
-                train_arrival = int((train[0] - current_time))
-
-                # do not show past arrivals (e.g. a train arriving in -2 minutes)
-                # or trains that you'll never make (i.e. factor in station travel time)
-                if (train_arrival - station_travel_time) >= 0:
-                    train1_name = str(station_trains[index][1])
-                    train1_minsaway = int(round(((
-                        station_trains[index][0] - current_time) / 60.0),0))
-
-                    # if there's an arrival after this one, get details and show both
-                    train_count = len(station_trains)
-                    if (train_count - (index + 1)) >= 2:
-                        train2_name = str(station_trains[index + 1][1])
-                        train2_minsaway = int(round(((
-                            station_trains[index + 1][0] - current_time) / 60.0),0))
-                        display_message = ('     ({}) in {}\' then ({}) in {}\''.format(
-                            train1_name, train1_minsaway,
-                            train2_name, train2_minsaway))
-                        break
-                        
-                    # if we're here then, assume we can only show one train
-                    display_message = ('     ({}) in {}\''.format(
-                        train1_name, train1_minsaway))
-                    
-                    break
-                
+        # build ticker accordingly; show first two arrivals if more than one train
+        # array content: trains[arrival time in minutes][train number e.g. "D"]
+        if trains:
+            if len(trains) > 1:
+                ticker_text = ('({}) in {}\' then ({}) in {}\''
+                    .format(trains[0][1], trains[0][0],trains[1][1], trains[1][0]))
+            else:
+                ticker_text = ('({}) in {}\''.format(trains[0][1], trains[0][0]))
         else:
-            display_message = ('     Cannot get train data or there are no trains.')
-            
-        time.sleep(refresh_delay)
+            ticker_text = ('No train data.')
 
-# Uncomment either line below to switch the behaviour of the program between the
-# original, "leavenow" mode (letting you know when it's time to leave your home/office)
-# or "traintime" mode that simply displays the arrival times of the next two trains.
-#if __name__ == '__main__': leavenow()
-if __name__ == '__main__': traintime()
+        time.sleep(feed_refresh_delay)
+        trains = get_trains('refresh')
+
+if __name__ == '__main__': main()
