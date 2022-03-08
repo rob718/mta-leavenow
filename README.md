@@ -19,7 +19,7 @@ pip install nyct-gtfs
 
 You’ll also need an MTA API key that you can register for here: https://api.mta.info/#/AccessKey.
 
-Finally you’ll need to know the feed URL and stop ID for the train and station you want to monitor. See https://api.mta.info/#/subwayRealTimeFeeds and http://web.mta.info/developers/data/nyct/subway/Stations.csv for those.
+Finally you’ll need to know the feed URL and stop ID for the train and station you want to monitor. Specifics on these below.
 
 # Installation and Configuration
 
@@ -36,7 +36,7 @@ nano mta-leavenow.py
 
 **my_feed_url** - Specify the feed URL from the list of feeds here See https://api.mta.info/#/subwayRealTimeFeeds.
 
-**my_stop_id** - The station you want to monitor. Determine "GTFS Stop ID" and suffix with direction (i.e. N or S). For example 'R31N' will monitor north-bound trains at Atlantic-Barclays Center. Complete station list here: http://web.mta.info/developers/data/nyct/subway/Stations.csv
+**my_stop_id** - The station you want to monitor. Determine "GTFS Stop ID" and suffix with direction (i.e. N or S). For example 'R31N' will monitor north-bound trains at Atlantic-Barclays Center. Complete station list here: http://web.mta.info/developers/data/nyct/subway/Stations.csv or checkout https://transitfeeds.com/p/mta/79/latest/stops (thanks @rob-lambeth)
 
 **my_walking_time** - Specify the amount of time (in minutes) it takes to walk to the station. This makes sure that only trains you can actually make will be shown.
 
