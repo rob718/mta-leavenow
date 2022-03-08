@@ -12,7 +12,7 @@ Typical output:
 ```The (D) train departs in 8 min then (N) train departs in 11 min.```
 
 # Prerequisites
-The following packages are needed:  Andrew Dickinson's [NYCT-GTFS] library (https://github.com/Andrew-Dickinson/nyct-gtfs). Depending on your system, you can install it with something like:
+The following package(s) are needed:  Andrew Dickinson's [NYCT-GTFS] library (https://github.com/Andrew-Dickinson/nyct-gtfs). Depending on your system, you can install it with something like:
 ```
 pip install nyct-gtfs
 ```
@@ -34,11 +34,11 @@ nano mta-leavenow.py
 ```
 **my_api_key** - Update the API key your key that you registered for here: https://api.mta.info/#/AccessKey
 
+**my_feed_url** - Specify the feed URL from the list of feeds here See https://api.mta.info/#/subwayRealTimeFeeds.
+
 **my_stop_id** - The station you want to monitor. Determine "GTFS Stop ID" and suffix with direction (i.e. N or S). For example 'R31N' will monitor north-bound trains at Atlantic-Barclays Center. Complete station list here: http://web.mta.info/developers/data/nyct/subway/Stations.csv
 
 **my_walking_time** - Specify the amount of time (in minutes) it takes to walk to the station. This makes sure that only trains you can actually make will be shown.
-
-**Subway Feed ID** - Specify the feed ID from the list of feeds here http://datamine.mta.info/list-of-feeds. For example 16 is the R, N, W, Q line. If you want to monitor multiple lines, comma separate them e.g. ```[16,21]```.
 
 **feed_refresh_delay** - Specify the refresh feed time. Feeds are generated every 30 seconds, so anything less wouldn't make sense.
 
